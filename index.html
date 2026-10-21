@@ -22,7 +22,10 @@
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
   font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
 .wrap{max-width:940px;margin:0 auto;padding:0 20px 80px}
-header{padding:44px 0 24px;border-bottom:2px solid var(--ink)}
+header{position:relative;padding:44px 0 24px;border-bottom:2px solid var(--ink)}
+.guide-link{position:absolute;top:40px;right:0;font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;border:1px solid var(--ink);border-radius:6px;padding:6px 12px;background:var(--card)}
+.guide-link:hover{background:var(--ink);color:var(--card)}
+@media (max-width:560px){.guide-link{position:static;display:inline-block;margin-bottom:12px}}
 .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--ink-3);margin:0 0 10px}
 h1{font-family:var(--serif);font-weight:700;font-size:32px;line-height:1.25;margin:0 0 6px}
 .sub{color:var(--ink-2);margin:0;font-size:14px}
@@ -208,6 +211,7 @@ footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--rule);font-si
 <div class="wrap">
 
 <header>
+  <a class="guide-link" href="guide.html" target="_blank" rel="noopener">사용안내 ↗</a>
   <p class="eyebrow">담임 출결 마감 도구</p>
   <h1>출결 서류 대조 점검</h1>
   <p class="sub">나이스 월별 출결 현황과 리로스쿨 결석신고서를 대조해 누락 서류와 불일치 항목을 찾아냅니다.</p>

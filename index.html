@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>출결 서류 대조 점검</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --ink:#1B2A41; --ink-2:#41506B; --ink-3:#7A869A;
+  --paper:#F6F7F4; --card:#FFFFFF; --rule:#DDE1E6;
+  --red:#A32C21; --red-bg:#FBEEEC;
+  --amber:#96660A; --amber-bg:#FBF3E4;
+  --flag:#C2700B; --flag-bg:#FDEED4; --flag-rule:#EBD3A6;
+  --green:#2C6650; --green-bg:#EBF3EF;
+  --gray:#7A869A; --gray-bg:#F0F1F3;
+  --serif:"Nanum Myeongjo","Batang","AppleMyungjo",serif;
+  --sans:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+  --mono:ui-monospace,"SFMono-Regular","Consolas",monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:940px;margin:0 auto;padding:0 20px 80px}
+header{padding:44px 0 24px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--ink-3);margin:0 0 10px}
+h1{font-family:var(--serif);font-weight:700;font-size:32px;line-height:1.25;margin:0 0 6px}
+.sub{color:var(--ink-2);margin:0;font-size:14px}
+
+/* 단계 */
+.steps{display:flex;gap:0;margin:24px 0 0;font-family:var(--mono);font-size:12px}
+.steps div{flex:1;padding:9px 12px;border:1px solid var(--rule);border-right:0;color:var(--ink-3);background:var(--card)}
+.steps div:last-child{border-right:1px solid var(--rule)}
+.steps div.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* 업로드 */
+.drops{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px;align-items:stretch}
+.drop{background:var(--card);border:1.5px dashed var(--rule);border-radius:3px;padding:26px 20px;
+  text-align:center;cursor:pointer;transition:border-color .15s,background .15s;
+  display:grid;align-content:center}
+.drop:hover,.drop.over{border-color:var(--ink);background:#fff}
+.drop.ok{border-style:solid;border-color:var(--green);background:var(--green-bg)}
+.drop h3{font-family:var(--serif);font-size:17px;margin:0 0 4px}
+.drop p{margin:0;font-size:12.5px;color:var(--ink-3);font-family:var(--mono)}
+.drop .fname{margin-top:8px;font-size:13px;color:var(--green);font-weight:600;word-break:break-all}
+.drop input{display:none}
+.paste{background:var(--card);border:1.5px solid var(--rule);border-radius:3px;padding:16px 18px}
+.paste.ok{border-color:var(--green);background:var(--green-bg)}
+.paste h3{font-family:var(--serif);font-size:17px;margin:0 0 3px}
+.paste p{margin:0 0 8px;font-size:12.5px;color:var(--ink-3);font-family:var(--mono)}
+.paste .cnt{font-size:12px;color:var(--green);font-weight:600;margin-top:6px;min-height:17px}
+textarea{width:100%;height:132px;padding:11px;font-family:var(--mono);font-size:12px;
+  border:1px solid var(--rule);border-radius:3px;resize:vertical;background:#fff}
+.btn{font-family:var(--sans);font-size:14px;padding:11px 22px;border:1px solid var(--ink);
+  background:var(--ink);color:#fff;border-radius:3px;cursor:pointer;margin-top:18px}
+.btn:hover{opacity:.86}
+.btn[disabled]{background:var(--gray-bg);color:var(--ink-3);border-color:var(--rule);cursor:not-allowed}
+.btn.ghost{background:var(--card);color:var(--ink)}
+.btn.ghost:hover{background:var(--ink);color:#fff;opacity:1}
+.log{margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);white-space:pre-wrap}
+.log .err{color:var(--red)}
+
+/* 확인 단계 */
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;background:var(--card)}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:11.5px;color:var(--ink-3);font-weight:600;border-bottom:1px solid var(--ink)}
+td.d,td.p{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);white-space:nowrap}
+.warnbox{background:var(--amber-bg);border-left:3px solid var(--amber);padding:13px 16px;
+  border-radius:3px;font-size:13.5px;margin-top:14px;color:var(--amber)}
+
+/* 통합 확인표 */
+#checkTable td{font-size:12.5px}
+#checkTable .sub2{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);
+  margin-top:2px;white-space:normal}
+tr.flag{background:var(--flag-bg)}
+tr.flag td{border-bottom-color:var(--flag-rule)}
+tr.flag td:first-child{box-shadow:inset 4px 0 0 var(--flag)}
+tr.flag .why{color:var(--flag);font-weight:600}
+tr.info{color:var(--ink-3)}
+tr.info td:first-child{box-shadow:inset 4px 0 0 var(--rule)}
+tr.ok td:first-child{box-shadow:inset 4px 0 0 var(--green)}
+.judge{font-size:11.5px;font-weight:600;white-space:nowrap}
+tr.flag .judge{color:var(--flag)}
+tr.ok .judge{color:var(--green)}
+tr.info .judge{color:var(--gray)}
+.filterbar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  margin-top:16px;padding:11px 14px;background:var(--card);border:1px solid var(--rule);border-radius:3px}
+.filterbar .cnt{font-size:13.5px}
+.filterbar .cnt b{font-family:var(--mono);font-size:17px;color:var(--flag)}
+.filterbar label{font-size:13px;color:var(--ink-2);cursor:pointer;display:flex;align-items:center;gap:7px}
+.filterbar input{width:16px;height:16px;accent-color:var(--flag);cursor:pointer}
+.legend{margin-top:9px;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin:0 4px 0 12px;
+  vertical-align:0;background:var(--flag)}
+.legend i.g{background:var(--green)}
+.legend i.n{background:var(--rule)}
+.legend span:first-child i{margin-left:0}
+
+/* 보고서 */
+.status{margin:26px 0 0;background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:22px 24px}
+.status-top{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap}
+.status-label{font-family:var(--serif);font-size:18px;font-weight:700}
+.status-count{font-family:var(--mono);font-size:14px;color:var(--ink-2)}
+.status-count b{font-size:22px;color:var(--ink)}
+.bar{height:6px;background:var(--gray-bg);border-radius:99px;overflow:hidden;margin:14px 0 16px}
+.bar>i{display:block;height:100%;width:0;background:var(--green);transition:width .35s}
+.tally{display:flex;flex-wrap:wrap;border-top:1px solid var(--rule);padding-top:14px}
+.tally div{flex:1 1 90px;padding-right:14px}
+.tally dt{font-size:12px;color:var(--ink-3);margin:0 0 2px}
+.tally dd{margin:0;font-family:var(--mono);font-size:19px;font-weight:600}
+section{margin-top:38px}
+.sec-head{display:flex;align-items:baseline;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--rule)}
+.sec-head h2{font-family:var(--serif);font-size:21px;margin:0;font-weight:700}
+.sec-head .n{font-family:var(--mono);font-size:13px;color:var(--ink-3)}
+.sec-note{margin:10px 0 0;font-size:13.5px;color:var(--ink-2)}
+.item{display:grid;grid-template-columns:26px 1fr;gap:0 14px;background:var(--card);
+  border:1px solid var(--rule);border-left-width:3px;border-radius:3px;padding:16px 18px;margin-top:10px}
+.item.red{border-left-color:var(--red)}
+.item.amber{border-left-color:var(--amber)}
+.item.green{border-left-color:var(--green)}
+.item input[type=checkbox]{width:17px;height:17px;margin:4px 0 0;accent-color:var(--green);cursor:pointer}
+.item.done{opacity:.5}
+.item.done .head strong{text-decoration:line-through}
+.head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.head .date{font-family:var(--mono);font-size:13px;color:var(--ink-3);min-width:84px}
+.head strong{font-size:16px;font-weight:600}
+.tag{font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:2px}
+.tag.red{background:var(--red-bg);color:var(--red)}
+.tag.amber{background:var(--amber-bg);color:var(--amber)}
+.tag.green{background:var(--green-bg);color:var(--green)}
+.tag.gray{background:var(--gray-bg);color:var(--gray)}
+.meta{grid-column:2;font-size:13.5px;color:var(--ink-2);margin-top:5px}
+.action{grid-column:2;margin-top:9px;padding-top:9px;border-top:1px dashed var(--rule);font-size:13.5px}
+.action::before{content:"조치";font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  color:var(--ink-3);display:inline-block;margin-right:8px;vertical-align:1px}
+.strip{grid-column:2;display:flex;gap:2px;margin-top:9px}
+.strip span{font-family:var(--mono);font-size:10px;width:24px;height:22px;display:grid;place-items:center;
+  border:1px solid var(--rule);border-radius:2px;color:var(--ink-3);background:var(--card)}
+.strip span.off{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:600}
+details.fold{margin-top:10px}
+details.fold>summary{cursor:pointer;list-style:none;font-size:13.5px;color:var(--ink-2);
+  padding:11px 14px;background:var(--card);border:1px solid var(--rule);border-radius:3px}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::before{content:"▸ ";color:var(--ink-3)}
+details.fold[open]>summary::before{content:"▾ "}
+.close{margin-top:42px;background:var(--card);border:2px solid var(--ink);border-radius:3px;padding:26px}
+.close h2{font-family:var(--serif);font-size:20px;margin:0 0 8px}
+.close p{margin:0 0 16px;font-size:13.5px;color:var(--ink-2)}
+#closeMsg{font-size:14px;padding:13px 16px;border-radius:3px;background:var(--gray-bg);color:var(--ink-2)}
+#closeMsg.ready{background:var(--green-bg);color:var(--green);font-weight:600}
+footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--rule);font-size:12px;color:var(--ink-3)}
+.hidden{display:none}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media print{
+  body{background:#fff}.btn,.bar,.steps,#stage1,#stage2,.copy,.smsopt{display:none}
+  .item,.status,.close,.msgbox{break-inside:avoid}
+  .msgbody{border:none;background:#fff;padding:0;resize:none}
+  details.fold>summary{display:none}details.fold>*{display:block!important}
+}
+.tscroll{overflow-x:auto}
+.tscroll table{min-width:720px}
+
+/* 안내 문자 */
+.smsopt{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px;
+  padding:12px 14px;background:var(--card);border:1px solid var(--rule);border-radius:3px}
+.smsopt label{font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:7px}
+.smsopt input{font-family:var(--sans);font-size:13px;padding:6px 9px;width:120px;
+  border:1px solid var(--rule);border-radius:3px;background:#fff}
+.smsopt .btn{margin-left:auto;padding:8px 15px;font-size:13px}
+.msgbox{background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--amber);
+  border-radius:3px;padding:14px 16px;margin-top:10px}
+.msghead{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.msghead strong{font-size:15px}
+.msghead .n{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.copy{margin-left:auto;font-family:var(--sans);font-size:12.5px;padding:5px 13px;
+  border:1px solid var(--rule);background:var(--paper);color:var(--ink-2);border-radius:3px;cursor:pointer}
+.copy:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+.msgbody{height:auto;min-height:120px;font-family:var(--sans);font-size:13.5px;line-height:1.65;
+  background:var(--paper);margin:0}
+
+/* 남은 일 */
+.left-head{margin-top:26px;display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap;
+  padding-bottom:12px;border-bottom:2px solid var(--ink)}
+.left-head h2{font-family:var(--serif);font-size:22px;margin:0}
+.left-head .asof{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.left-sum{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.left-sum span{font-size:12.5px;padding:3px 9px;border-radius:2px;background:var(--gray-bg);color:var(--ink-2)}
+.left-sum b{font-family:var(--mono)}
+.left-grp{margin-top:22px}
+.left-grp h3{font-family:var(--serif);font-size:16px;margin:0 0 2px;display:flex;gap:10px;align-items:baseline}
+.left-grp h3 .n{font-family:var(--mono);font-size:12px;color:var(--ink-3);font-weight:400}
+#stage4 table td{font-size:12.5px}
+#stage4 td.nm{white-space:nowrap;font-weight:600;word-break:keep-all}
+#stage4 td.box{width:28px;text-align:center}
+#stage4 td.box i{display:inline-block;width:13px;height:13px;border:1.3px solid var(--ink-2);border-radius:2px}
+#stage4 td.act{color:var(--ink-2)}
+#stage4 .sub2{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:2px}
+.left-memo{width:100%;height:70px;margin-top:22px;font-family:var(--sans);font-size:13px}
+.left-empty{margin-top:22px;padding:18px;background:var(--green-bg);color:var(--green);font-weight:600;border-radius:3px}
+@media print{ .left-memo:placeholder-shown{display:none} #stage4 table{font-size:11.5px} }
+
+@media (max-width:600px){.drops{grid-template-columns:1fr}h1{font-size:25px}.strip span{width:20px}
+  .smsopt .btn{margin-left:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">담임 출결 마감 도구</p>
+  <h1>출결 서류 대조 점검</h1>
+  <p class="sub">나이스 월별 출결 현황과 리로스쿨 결석신고서를 대조해 누락 서류와 불일치 항목을 찾아냅니다.</p>
+</header>
+
+<div class="steps">
+  <div id="st1" class="on">1 · 파일 올리기</div>
+  <div id="st2">2 · 인식 결과 확인</div>
+  <div id="st3">3 · 점검 보고서</div>
+  <div id="st4">4 · 남은 일</div>
+</div>
+
+<!-- ══════ 1단계 ══════ -->
+<div id="stage1">
+  <div class="drops">
+    <label class="drop" id="dropX">
+      <h3>나이스 출결 현황</h3>
+      <p>.xlsx · .xls · .csv</p>
+      <div class="fname" id="nameX"></div>
+      <input type="file" id="fileX" accept=".xlsx,.xls,.csv">
+    </label>
+    <div class="paste" id="pastePanel">
+      <h3>리로스쿨 결석신고서</h3>
+      <p>화면 텍스트 붙여넣기</p>
+      <textarea id="pasteBox" placeholder="리로스쿨 결석신고서 목록을 인쇄 미리보기로 연 뒤 화면 전체를 복사해서(Ctrl+A → Ctrl+C) 여기에 붙여넣으세요."></textarea>
+      <div class="cnt" id="pasteCnt"></div>
+    </div>
+  </div>
+
+  <button class="btn" id="runBtn" disabled>대조 실행</button>
+  <div class="log" id="log"></div>
+</div>
+
+<!-- ══════ 2단계 ══════ -->
+<div id="stage2" class="hidden">
+  <section>
+    <div class="sec-head"><h2>인식 결과 확인</h2><span class="n" id="parseCount"></span></div>
+    <p class="sec-note">나이스 기록과 리로스쿨 신고서를 한 줄로 붙여 놓은 표입니다.
+      확인이 필요한 건은 주황색으로 표시했습니다. 대조 기준은 담임 승인기간입니다.</p>
+    <div id="parseWarn"></div>
+    <div class="filterbar">
+      <span class="cnt" id="flagCnt"></span>
+      <label><input type="checkbox" id="onlyFlag"> 확인 필요만 보기</label>
+    </div>
+    <div class="legend">
+      <span><i></i>확인 필요</span><span><i class="g"></i>이상 없음</span><span><i class="n"></i>서류 대상 아님</span>
+    </div>
+    <div class="tscroll"><table id="checkTable"></table></div>
+    <button class="btn" id="goBtn">보고서 만들기</button>
+    <button class="btn ghost" id="backBtn">파일 다시 올리기</button>
+  </section>
+</div>
+
+<!-- ══════ 3단계 ══════ -->
+<div id="stage3" class="hidden"></div>
+
+<!-- ══════ 4단계 ══════ -->
+<div id="stage4" class="hidden"></div>
+
+<footer>
+  대조 기준 — 담임 승인기간 우선 · 미인정 출결 제외 · 경조사 출석인정 제외<br>
+  교시 대조 — 조퇴는 나간 교시, 지각은 마지막 결시 교시, 결과는 앞뒤 교시를 모두 대조 · 리로스쿨의 0교시는 나이스의 조회로 봅니다<br>
+  모든 처리는 이 브라우저 안에서만 이루어집니다. 파일은 어디로도 전송되지 않습니다. 체크 표시는 화면에서만 유지되니 기록이 필요하면 인쇄해 두세요.
+</footer>
+</div>
+
+<script>
+const PERIODS = ['조회','1교시','2교시','3교시','4교시','5교시','6교시','7교시','종례'];
+const SHORT   = ['조','1','2','3','4','5','6','7','종'];
+
+/* 교시 인덱스 — 나이스의 '조회'와 리로스쿨의 '0교시'를 같은 자리로 본다 */
+const PIDX = {'조회':0, '0교시':0, '종례':8};
+for(let i=1; i<=7; i++) PIDX[`${i}교시`] = i;
+const riroName = i => i === 0 ? '0교시' : i === 8 ? '종례' : `${i}교시`;
+
+/* 리로스쿨 기간 문구 → 결시 구간 */
+function parseSpan(span){
+  const s = String(span||'').replace(/\s/g,'');
+  if(/일간/.test(s)) return {allDay:true, raw:span};
+  const m = s.match(/(0교시|조회|[1-7]교시)부터(종례|[0-7]교시)까지/);
+  if(!m) return {raw:span};
+  return {s:PIDX[m[1]], e:PIDX[m[2]], raw:span};
+}
+/* 나이스 결시교시 목록 → 결시 구간 */
+function neisRange(periods){
+  const idx = periods.map(p => PIDX[p]).filter(v => v !== undefined);
+  if(!idx.length) return null;
+  const noHomeroom = idx.filter(v => v !== 8);
+  return {s:Math.min(...idx), e:Math.max(...idx),
+          lastClass: noHomeroom.length ? Math.max(...noHomeroom) : Math.max(...idx)};
+}
+/* 나이스 기록을 리로스쿨 표기법으로 바꾼 문구 */
+function riroSpanText(kind, nr){
+  if(!nr) return '';
+  if(kind.includes('지각')) return `0교시부터 ${riroName(nr.lastClass)}까지`;
+  if(kind.includes('조퇴')) return `${riroName(nr.s)}부터 ${riroName(nr.lastClass)}까지`;
+  if(kind.includes('결과')) return `${riroName(nr.s)}부터 ${riroName(nr.e)}까지`;
+  return '전일';
+}
+
+const KIND_MAP = {
+  '질병결석':['결석/질병'], '기타결석':['결석/기타'],
+  '출석인정결석':['결석/생리결석','결석/출석인정','결석/기타'],
+  '질병지각':['지각/질병'], '기타지각':['지각/기타'], '출석인정지각':['지각/출석인정','지각/생리결석'],
+  '질병조퇴':['조퇴/질병'], '기타조퇴':['조퇴/기타'], '출석인정조퇴':['조퇴/출석인정','조퇴/생리결석'],
+  '질병결과':['결과/질병'], '기타결과':['결과/기타'], '출석인정결과':['결과/출석인정','결과/생리결석'],
+};
+
+let NEIS = null, DOCS = null, BUCKETS = null;
+const $ = id => document.getElementById(id);
+const log = (m, err) => { $('log').innerHTML += (err?`<span class="err">${m}</span>`:m) + '\n'; };
+const esc = s => String(s??'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+/* ───────── 파일 입력 ───────── */
+function hookDrop(dropId, inputId, nameId, cb){
+  const drop = $(dropId), input = $(inputId);
+  input.addEventListener('change', e => { if(e.target.files[0]) accept(e.target.files[0]); });
+  ['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => { if(e.dataTransfer.files[0]) accept(e.dataTransfer.files[0]); });
+  function accept(f){ $(nameId).textContent = f.name; drop.classList.add('ok'); cb(f); checkReady(); }
+}
+let fileXlsx = null;
+hookDrop('dropX','fileX','nameX', f => fileXlsx = f);
+$('pasteBox').addEventListener('input', checkReady);
+function checkReady(){
+  const t = $('pasteBox').value.trim();
+  const n = (t.match(/문서번호/g) || []).length;
+  $('pastePanel').classList.toggle('ok', t.length > 50);
+  $('pasteCnt').textContent = !t ? '' : n ? `문서번호 ${n}개가 보입니다` : `${t.length}자 붙여넣음`;
+  $('runBtn').disabled = !(fileXlsx && t.length > 50);
+}
+
+/* ───────── 나이스 엑셀 파싱 ───────── */
+async function parseXlsx(file){
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array'});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
+
+  let hdr = -1;
+  for(let i=0; i<Math.min(grid.length,20); i++){
+    const row = grid[i].map(c => String(c).replace(/\s/g,''));
+    if(row.includes('성명') && row.some(c => c.includes('출결'))){ hdr = i; break; }
+  }
+  if(hdr < 0) throw new Error('엑셀에서 머리글(일자·성명·출결구분)을 찾지 못했습니다.');
+
+  const cols = {};
+  grid[hdr].forEach((c,j) => {
+    const k = String(c).replace(/\s/g,'');
+    if(k.includes('일자')) cols.date = j;
+    else if(k.includes('번호')) cols.no = j;
+    else if(k.includes('성명')) cols.name = j;
+    else if(k.includes('출결')) cols.kind = j;
+    else if(k.includes('결시')||k.includes('교시')) cols.periods = j;
+    else if(k.includes('사유')) cols.reason = j;
+  });
+
+  const rows = [];
+  for(let i=hdr+1; i<grid.length; i++){
+    const r = grid[i];
+    const raw = String(r[cols.date]??'').trim();
+    const m = raw.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+    const name = String(r[cols.name]??'').trim();
+    if(!m || !name) continue;
+    const pr = String(r[cols.periods]??'').trim();
+    rows.push({
+      date: `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`,
+      dow: (raw.match(/\(([월화수목금토일])\)/)||[])[1] || '',
+      no: String(r[cols.no]??'').trim(),
+      name,
+      kind: String(r[cols.kind]??'').trim().replace(/\s/g,''),
+      reason: String(r[cols.reason]??'').trim(),
+      periodsRaw: pr,
+      periods: pr.split(',').map(s => s.replace(/\(.*?\)/g,'').trim()).filter(Boolean),
+    });
+  }
+  return rows;
+}
+
+/* ───────── 리로스쿨 텍스트 파싱 ───────── */
+/* 문서를 본문과 결재정보로 나눈다.
+   리로스쿨 화면을 복사하면 문서번호가 본문 앞에, PDF로 저장하면 본문 뒤에 온다.
+   두 경우를 모두 다루려고 먼저 어느 쪽인지 판별한 뒤 나눈다. */
+function splitDocuments(norm){
+  const iDoc  = norm.search(/문서번호/);
+  const iKind = norm.search(/출결\s*종류/);
+  const headerFirst = iDoc >= 0 && iKind >= 0 && iDoc < iKind;
+  const bodies = [], metas = [];
+  const cut = p => p.search(/이름\s*\/\s*학번/);
+
+  if(headerFirst){
+    norm.split(/문서번호/).slice(1).forEach(p => {
+      const at = cut(p);
+      metas.push('문서번호' + (at >= 0 ? p.slice(0, at) : p));
+      bodies.push(at >= 0 ? p.slice(at) : '');
+    });
+  } else {
+    norm.split(/결석신고서/).forEach((p, i) => {
+      if(i === 0){ if(/출결\s*종류/.test(p)) bodies.push(p); return; }
+      const at = cut(p);
+      metas.push('결석신고서' + (at >= 0 ? p.slice(0, at) : p));
+      if(at >= 0) bodies.push(p.slice(at));
+    });
+  }
+  const n = Math.min(bodies.length, metas.length);
+  const pairs = Array.from({length:n}, (_,k) => ({body:bodies[k], meta:metas[k]}));
+  /* 문서번호가 본문 끝에 붙어 나온 경우 그 꼬리를 결재정보 쪽으로 옮긴다 */
+  pairs.forEach(p => {
+    if(/문서번호/.test(p.meta)) return;
+    const at = p.body.search(/문서번호/);
+    if(at < 0) return;
+    p.meta += ' ' + p.body.slice(at);
+    p.body = p.body.slice(0, at);
+  });
+  return {pairs, headerFirst, expected: (norm.match(/문서번호/g) || []).length};
+}
+
+function collectSpans(flat){
+  const out = [];
+  // 라벨이 앞에 오는 경우 — 승인 기간 2026-08-14 ~ 2026-08-14 (1일간)
+  const fwd = /(신청|승인)\s*기간\s*(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})\s*\(([^)]*)\)/g;
+  let m;
+  while((m = fwd.exec(flat)) !== null)
+    out.push({type:m[1], start:m[2], end:m[3], span:m[4].trim()});
+  if(out.length) return out;
+  // 날짜가 먼저 오는 표 구조로 뽑힌 경우
+  const rev = /(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})[^()]{0,60}?(신청|승인)\s*기간\s*\(([^)]*)\)/g;
+  while((m = rev.exec(flat)) !== null)
+    out.push({type:m[3], start:m[1], end:m[2], span:m[4].trim()});
+  return out;
+}
+
+function parseRiro(text){
+  const norm = text.replace(/\u00a0/g,' ');
+  const {pairs, expected} = splitDocuments(norm);
+  const docs = [];
+
+  pairs.forEach(({body, meta}, i) => {
+    const flat = body.replace(/\s+/g,' ');
+    const mflat = meta.replace(/\s+/g,' ');
+
+    /* 학교마다 문서번호 표기가 달라서, 엄격한 형식이 안 맞으면
+       '문서번호' 뒤에 오는 숫자 섞인 토큰을 그대로 쓴다 */
+    const dm = mflat.match(/문서번호\s*([^\s]*\d{4}-\d{3,5})/)
+            || mflat.match(/문서번호\s*:?\s*(\S*\d\S*)/);
+    const docno = dm ? dm[1] : `(문서번호 미인식 ${i+1})`;
+    const status = /완료/.test(mflat) ? '완료'
+                 : /반려/.test(mflat) ? '반려'
+                 : /대기/.test(mflat) ? '서명대기' : '진행중';
+
+    /* 화면이 다 뜨기 전에 복사하면 이름 칸이 비는 경우가 있다 — 학번만이라도 건진다 */
+    const nm = flat.match(/이름\s*\/\s*학번\s*([가-힣]{2,5})\s*\/\s*(\d{4,6})/)
+            || (m => m ? [m[0], m[1], ''] : null)(flat.match(/이름\s*\/\s*학번\s*([가-힣]{2,5})(?![가-힣])/))
+            || (m => m ? [m[0], '', m[1]] : null)(flat.match(/이름\s*\/\s*학번[^0-9가-힣]{0,6}(\d{4,6})/));
+    if(nm && /^(출결|사유|증빙|신청|승인|기간|종류)/.test(nm[1])) nm[1] = '';
+    const km = flat.match(/출결\s*종류\s*([가-힣]+)\s*\/\s*([가-힣]+)/);
+    const rm = flat.match(/사유\s*(.*?)\s*(?:증빙자료|위와\s*같이)/);
+
+    /* 증빙 첨부 여부 — 첨부가 있으면 '증빙자료 [종류] [파일명] [올린 시각]'이 찍히고,
+       없으면 '증빙자료' 줄 자체가 없다. 파일명(확장자)이 실제로 있는지로 판정한다.
+       두 번째 첨부부터는 '증빙자료' 없이 '[종류] [파일명]'만 이어진다. */
+    const ps = flat.search(/증빙자료/);
+    const pe = flat.search(/위와\s*같이\s*출결/);
+    const proofZone = ps >= 0 ? flat.slice(ps + 4, pe > ps ? pe : undefined) : '';
+    const FILE_RE = /([가-힣A-Za-z]{0,12})\s+(\S+\.(?:jpe?g|png|gif|heic|heif|webp|bmp|tiff?|pdf|hwpx?|docx?))(?=\s|$)/gi;
+    const proofs = [...proofZone.matchAll(FILE_RE)].map(m => ({kind:m[1] || '첨부', file:m[2]}));
+
+    const spans = collectSpans(flat);
+    const req  = spans.find(s => s.type === '신청') || null;
+    const appr = [...spans].reverse().find(s => s.type === '승인') || null;
+
+    docs.push({
+      docno, status,
+      name: nm ? nm[1] : '', sid: nm ? nm[2] : '',
+      kind: km ? `${km[1]}/${km[2]}` : '',
+      reason: rm ? rm[1].trim() : '',
+      proofs, hasProof: proofs.length > 0,
+      proof: proofs.length ? [...new Set(proofs.map(p => p.kind))].join('·') : '',
+      req, appr, final: appr || req, used:false,
+    });
+  });
+
+  docs.expected = expected;
+  return docs;
+}
+
+/* ───────── 대조 ───────── */
+const isExempt   = k => k.startsWith('미인정');
+/* 증빙이 필요한 신고서 — 생리결석과 기타 사유는 증빙 첨부를 요구하지 않는다 */
+const needsProof = d => !/생리결석|\/기타/.test(d.kind || '');
+/* 생리결석은 리로스쿨이 아니라 담임이 파일을 따로 받는다 — 첨부가 없으면 받았는지 확인하라고 알린다 */
+const isMens = d => /생리결석/.test(d.kind || '');
+const mensLabel = d => { const w = (d.kind || '').split('/')[0]; return w === '결석' ? '생리결석' : `생리결석(${w})`; };
+const isGyeongjo = r => /상$|상\b|경조|조부|조모|외조|부친|모친|친상/.test(r.replace(/\s/g,''));
+
+function stripHtml(periods){
+  const set = new Set(periods);
+  return `<div class="strip">${PERIODS.map((p,i) =>
+    `<span class="${set.has(p)?'off':''}">${SHORT[i]}</span>`).join('')}</div>`;
+}
+
+function compare(neis, docs){
+  const buckets = {collect:[], teacher:[], neisIn:[], pending:[], noProof:[], mens:[], matched:[], exempt:[], odd:[], noname:[], all:[]};
+  const add = (lv, judge, r, d, why) => buckets.all.push({lv, judge, r, d:d||null, why:why||''});
+
+  /* 이름이 빠진 신고서는 학번 끝 두 자리(번호)로 나이스 명단에서 이름을 찾아 채운다 */
+  for(const d of docs){
+    if(d.name || !d.sid) continue;
+    const no = Number(d.sid.slice(-2));
+    const names = [...new Set(neis.filter(r => Number(r.no) === no).map(r => r.name))];
+    if(names.length === 1){ d.name = names[0]; d.nameFrom = 'sid'; }
+  }
+
+  for(const r of neis){
+    if(!r.kind){
+      const why = '나이스 출결구분이 비어 있습니다. 입력이 중단된 건인지 확인해 주세요.';
+      buckets.odd.push({r, why});
+      add('flag','출결구분 없음', r, null, why); continue;
+    }
+    if(isExempt(r.kind)){
+      buckets.exempt.push(r);
+      add('info','서류 불요', r, null, '미인정 출결 — 증빙 대상이 아닙니다.'); continue;
+    }
+
+    const cand = docs.find(d => !d.used && d.name === r.name && d.final &&
+                                d.final.start <= r.date && r.date <= d.final.end);
+
+    if(!cand){
+      if(r.kind.startsWith('출석인정') && isGyeongjo(r.reason)){
+        buckets.teacher.push({r, why:'경조사 출석인정 — 결석신고서 대상이 아닙니다.',
+          act:'가족관계증명서 등 경조사 증빙 보관 여부와 출석인정 일수 기준을 확인해 주세요.'});
+        add('info','담임 처리', r, null, '경조사 출석인정 — 리로스쿨 서류 대상이 아닙니다. 증빙 보관과 인정 일수만 확인해 주세요.');
+      } else {
+        buckets.collect.push(r);
+        add('flag','서류 없음', r, null,
+          `리로스쿨에 해당 신고서가 없습니다. ${riroSpanText(r.kind, neisRange(r.periods)) || '전일'}로 받아 주세요.`);
+      }
+      continue;
+    }
+
+    cand.used = true;
+    const notes = [];
+    let bad = false;
+
+    const allowed = KIND_MAP[r.kind] || [];
+    if(allowed.length && !allowed.includes(cand.kind)){
+      bad = true; notes.push(`출결종류 불일치 — 나이스 ${r.kind} ↔ 신고서 ${cand.kind}`);
+    }
+
+    const span = cand.final.span || '';
+    const sp = parseSpan(span), nr = neisRange(r.periods);
+    const partial = r.kind.includes('조퇴') || r.kind.includes('지각') || r.kind.includes('결과');
+
+    if(partial && sp.allDay){
+      bad = true; notes.push(`나이스는 ${r.kind}(${riroSpanText(r.kind,nr)})인데 신고서는 전일로 되어 있습니다`);
+    } else if(partial && sp.s === undefined){
+      bad = true; notes.push(`신고서 기간 문구를 해석하지 못했습니다 — "${span}"`);
+    } else if(partial && nr){
+      // 조퇴는 나간 교시, 지각은 들어온 교시, 결과는 양쪽 모두를 본다
+      if(r.kind.includes('조퇴') && sp.s !== nr.s){
+        bad = true; notes.push(`조퇴 시각 불일치 — 나이스 ${riroName(nr.s)}부터 ↔ 신고서 ${riroName(sp.s)}부터`);
+      }
+      if(r.kind.includes('지각') && sp.e !== nr.lastClass){
+        bad = true; notes.push(`등교 시각 불일치 — 나이스 ${riroName(nr.lastClass)}까지 결시 ↔ 신고서 ${riroName(sp.e)}까지`);
+      }
+      if(r.kind.includes('결과') && (sp.s !== nr.s || sp.e !== nr.e)){
+        bad = true; notes.push(`결과 교시 불일치 — 나이스 ${riroSpanText(r.kind,nr)} ↔ 신고서 ${span}`);
+      }
+    } else if(!partial && !sp.allDay && sp.s !== undefined){
+      bad = true; notes.push(`나이스는 ${r.kind}(전일)인데 신고서는 ${span}로 되어 있습니다`);
+    }
+
+    if(cand.req && cand.appr &&
+       (cand.req.start !== cand.appr.start || cand.req.end !== cand.appr.end ||
+        cand.req.span !== cand.appr.span)){
+      notes.push(`학생이 올린 기간 "${cand.req.span}"을 담임 승인 "${cand.appr.span}" 기준으로 대조함`);
+    }
+
+    const noProof = needsProof(cand) && !cand.hasProof;
+    const mensNo  = isMens(cand) && !cand.hasProof;
+    if(bad){
+      if(noProof) notes.push('증빙자료도 첨부되어 있지 않습니다');
+      if(mensNo)  notes.push('생리결석 증빙 파일도 첨부되어 있지 않습니다');
+      buckets.odd.push({r, d:cand, why:notes.join(' · ')});
+      add('flag','내용 불일치', r, cand, notes.join(' · '));
+    } else if(noProof){
+      buckets.noProof.push({r, d:cand, notes});
+      add('flag','증빙 없음', r, cand,
+        [`신고서 내용은 일치하지만 증빙자료가 첨부되어 있지 않습니다${cand.status !== '완료' ? ` (결재 ${cand.status})` : ''}.`, ...notes].join(' · '));
+    } else if(mensNo){
+      buckets.mens.push({r, d:cand, notes});
+      add('flag','생리결석 증빙 확인', r, cand,
+        [`리로스쿨에 첨부된 파일이 없습니다. 생리결석 증빙을 따로 받았는지 확인해 주세요${cand.status !== '완료' ? ` (결재 ${cand.status})` : ''}.`, ...notes].join(' · '));
+    } else if(cand.status !== '완료'){
+      buckets.pending.push({r, d:cand, notes});
+      add('flag', `결재 ${cand.status}`, r, cand,
+        ['내용은 일치합니다. 결재만 남았습니다.', ...notes].join(' · '));
+    } else {
+      buckets.matched.push({r, d:cand, notes});
+      add('ok','대조 완료', r, cand, notes.join(' · '));
+    }
+  }
+
+  for(const d of docs){
+    if(!d.name){
+      /* 같은 날짜·같은 종류로 서류가 비어 있는 나이스 건이 있으면 후보로 알려 준다 */
+      const guess = d.final ? buckets.collect.filter(r =>
+        d.final.start <= r.date && r.date <= d.final.end &&
+        (!(KIND_MAP[r.kind]||[]).length || (KIND_MAP[r.kind]||[]).includes(d.kind))) : [];
+      const hint = guess.length
+        ? ` 같은 날짜·종류로 서류가 비어 있는 학생: ${[...new Set(guess.map(r => r.name))].join(', ')}.`
+        : '';
+      d.noName = true;
+      buckets.noname.push({d, hint:hint.trim()});
+      add('flag','이름 미인식', null, d,
+        `신고서에서 학생 이름을 읽지 못했습니다. 리로스쿨 화면이 다 뜨기 전에 복사되면 이름 칸이 비어 나옵니다. 화면이 완전히 뜬 뒤 다시 복사해 붙여넣어 주세요.${hint}`);
+      continue;
+    }
+    if(!d.final){
+      add('flag','인식 실패', null, d,
+        '이름·기간·출결종류를 읽지 못했습니다. 붙여넣은 원문에서 이 문서를 직접 확인해 주세요.');
+      continue;
+    }
+    if(!d.used){
+      buckets.neisIn.push(d);
+      add('flag','나이스 없음', null, d,
+        `신고서는 있는데 나이스에 기록이 없습니다. ${d.kind.replace('/',' · ')} ${spanLabel(d.final.span)}로 입력이 필요한지 확인해 주세요.`);
+    }
+  }
+
+  buckets.all.sort((a,b) => {
+    const da = a.r ? a.r.date : (a.d.final ? a.d.final.start : '9999');
+    const db = b.r ? b.r.date : (b.d.final ? b.d.final.start : '9999');
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
+  return buckets;
+}
+
+/* ───────── 보고서 렌더링 ───────── */
+let ITEMS = [];
+const plain = h => { const t = document.createElement('div'); t.innerHTML = h || ''; return t.textContent.replace(/\s+/g,' ').trim(); };
+function itemHtml(cls, date, name, tags, meta, periods, act, rec){
+  const i = ITEMS.length;
+  ITEMS.push(Object.assign({date, name, cls, meta:plain(meta), act:plain(act)}, rec || {}));
+  return `<label class="item ${cls}" data-i="${i}"><input type="checkbox" class="tick">
+    <div class="head"><span class="date">${esc(date)}</span><strong>${esc(name)}</strong>${tags}</div>
+    ${meta ? `<div class="meta">${meta}</div>` : ''}
+    ${periods && periods.length ? stripHtml(periods) : ''}
+    ${act ? `<div class="action">${act}</div>` : ''}</label>`;
+}
+const dfmt = (d, dow) => d.slice(5).replace('-','.') + (dow ? ` (${dow})` : '');
+const spanLabel = s => /일간/.test(s) ? '전일' : s;
+
+/* ───────── 학부모 안내 문자 ───────── */
+let SMS_CLASS = '', SMS_TEACHER = '';
+
+/* 출결구분에 맞는 증빙 안내 문구 */
+function proofPhrase(kinds){
+  const set = new Set();
+  kinds.forEach(k => {
+    if(k.includes('질병')) set.add('진료확인서·처방전 등 진료 사실을 확인할 수 있는 서류');
+    else if(k.startsWith('출석인정')) set.add('출석인정 사유를 확인할 수 있는 증빙자료');
+    else set.add('사유를 확인할 수 있는 증빙자료');
+  });
+  return [...set].join(' 또는 ');
+}
+
+/* 한 학생분 문자 본문 — 받을 것의 종류(신고서 미제출 / 증빙 미첨부 / 생리결석 증빙)별로 문단을 나눈다 */
+function smsLine(e){
+  const r = e.r;
+  const [, mm, dd] = r.date.split('-');
+  const label = e.type === 'mens' ? mensLabel(e.d) : r.kind;
+  const when = riroSpanText(r.kind, neisRange(r.periods));
+  const tail = (when && when !== '전일') ? ` (${when})` : '';
+  return `· ${Number(mm)}월 ${Number(dd)}일(${r.dow || '-'}) ${label}${tail}`;
+}
+function smsText(name, list){
+  const who = SMS_CLASS && SMS_TEACHER ? `${SMS_CLASS} 담임 ${SMS_TEACHER}입니다.`
+            : SMS_CLASS ? `${SMS_CLASS} 담임입니다.`
+            : SMS_TEACHER ? `담임 ${SMS_TEACHER}입니다.`
+            : '담임교사입니다.';
+  const of = t => list.filter(e => e.type === t);
+  const collect = of('collect'), proof = of('proof'), mens = of('mens');
+  const paras = [];
+  if(collect.length) paras.push(
+`아래 출결에 대한 결석신고서가 아직 제출되지 않았습니다.
+${collect.map(smsLine).join('\n')}
+→ 리로스쿨에 결석신고서를 작성하시고, ${proofPhrase(collect.map(e => e.r.kind))}를 첨부하여 제출해 주세요.`);
+  if(proof.length) paras.push(
+`아래 출결은 결석신고서는 제출되었으나 증빙서류가 첨부되어 있지 않습니다.
+${proof.map(smsLine).join('\n')}
+→ 리로스쿨의 해당 신고서에 ${proofPhrase(proof.map(e => e.r.kind))}를 첨부해 주세요.`);
+  if(mens.length) paras.push(
+`아래 생리결석은 확인 서류를 담임교사에게 따로 받고 있는데, 아직 확인되지 않았습니다.
+${mens.map(smsLine).join('\n')}
+→ 확인 서류를 담임교사에게 보내 주세요. 이미 보내셨다면 알려 주시면 확인하겠습니다.`);
+
+  return `안녕하세요, ${name} 학생 학부모님. ${who}
+${name} 학생의 출결 서류와 관련하여 안내드립니다.
+
+${paras.join('\n\n')}
+
+서류가 제출되지 않으면 미인정 출결로 처리될 수 있으니 확인 부탁드립니다.
+문의사항이 있으시면 언제든 연락 주세요. 감사합니다.`;
+}
+
+function smsSection(entries){
+  const by = new Map();
+  for(const e of entries){
+    if(!by.has(e.r.name)) by.set(e.r.name, []);
+    by.get(e.r.name).push(e);
+  }
+  let h = `<section><div class="sec-head"><h2>서류 제출 안내 문자</h2>
+    <span class="n" id="smsCnt">${by.size}명</span></div>
+    <div id="smsNone" class="hidden" style="margin-top:10px;font-size:13.5px;color:var(--green)">남은 건이 없어 보낼 문자가 없습니다.</div>
+    <p class="sec-note">위의 <b>신고서 미제출 · 증빙 미첨부 · 생리결석 증빙 확인</b> 건을 학생별로 묶어 문자 문구를 만들었습니다.
+      위에서 <b>완료 체크한 건은 문자에서 빠집니다</b> (리로스쿨 밖에서 서류를 직접 받은 경우 체크하세요).
+      학급과 성함을 넣으면 문구에 반영되며, 보내기 전에 직접 고쳐 쓰셔도 됩니다.</p>
+    <div class="smsopt">
+      <label>학급 <input id="smsClass" placeholder="1학년 6반"></label>
+      <label>담임 성함 <input id="smsName" placeholder="홍길동"></label>
+      <button class="btn ghost" id="smsAll" style="margin:0">전체 복사</button>
+    </div>
+    <div id="smsList">`;
+  for(const [name, list] of by){
+    h += `<div class="msgbox" data-name="${esc(name)}">
+      <div class="msghead"><strong>${esc(name)}</strong>
+        <span class="n cnt">${list.length}건</span>
+        <button class="copy" type="button">복사</button></div>
+      <textarea class="msgbody" rows="12"></textarea></div>`;
+  }
+  return h + `</div></section>`;
+}
+
+let SMS_REFRESH = () => {};
+function hookSms(entries){
+  if(!entries.length) return;
+  /* 위 목록에서 체크하지 않은 건만 문자에 넣는다 */
+  const tickOf = sk => {
+    const lab = document.querySelector(`.item[data-i="${ITEMS.findIndex(x => x.sk === sk)}"]`);
+    return lab ? lab.querySelector('.tick') : null;
+  };
+  const remainingBy = () => {
+    const by = new Map();
+    entries.forEach(e => {
+      const t = tickOf(e.sk);
+      if(t && t.checked) return;
+      if(!by.has(e.r.name)) by.set(e.r.name, []);
+      by.get(e.r.name).push(e);
+    });
+    return by;
+  };
+  const boxes = [...document.querySelectorAll('.msgbox')];
+  const fit = ta => { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 4) + 'px'; };
+  const fill = () => {
+    const by = remainingBy();
+    boxes.forEach(bx => {
+      const list = by.get(bx.dataset.name) || [];
+      bx.classList.toggle('hidden', !list.length);
+      bx.querySelector('.cnt').textContent = `${list.length}건`;
+      const ta = bx.querySelector('.msgbody');
+      const sig = list.map(e => e.type + e.r.date + e.r.kind).join('|');
+      // 남은 건 구성이 바뀌면 직접 고친 문구라도 새로 만든다 (완료된 날짜가 문자에 남지 않도록)
+      if(ta.dataset.sig !== sig){ delete ta.dataset.edited; ta.dataset.sig = sig; }
+      if(!list.length || ta.dataset.edited) return;
+      ta.value = smsText(bx.dataset.name, list);
+      fit(ta);
+    });
+    $('smsCnt').textContent = `${by.size}명`;
+    $('smsNone').classList.toggle('hidden', by.size > 0);
+    $('smsAll').disabled = !by.size;
+  };
+  SMS_REFRESH = fill;
+
+  const copy = (text, btn) => {
+    const done = () => { const t = btn.textContent; btn.textContent = '복사됨'; 
+      setTimeout(() => btn.textContent = t, 1400); };
+    if(navigator.clipboard && window.isSecureContext){
+      navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
+    } else fallback(text, done);
+  };
+  const fallback = (text, done) => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); done(); }catch(e){ alert('복사에 실패했습니다. 직접 선택해서 복사해 주세요.'); }
+    document.body.removeChild(ta);
+  };
+
+  $('smsClass').value = SMS_CLASS;
+  $('smsName').value = SMS_TEACHER;
+  $('smsClass').addEventListener('input', e => { SMS_CLASS = e.target.value.trim(); fill(); });
+  $('smsName').addEventListener('input', e => { SMS_TEACHER = e.target.value.trim(); fill(); });
+  boxes.forEach(bx => {
+    const ta = bx.querySelector('.msgbody');
+    ta.addEventListener('input', () => { ta.dataset.edited = '1'; fit(ta); });
+    bx.querySelector('.copy').addEventListener('click', () => copy(ta.value, bx.querySelector('.copy')));
+  });
+  $('smsAll').addEventListener('click', () => copy(
+    boxes.filter(bx => !bx.classList.contains('hidden')).map(bx => `[${bx.dataset.name}]\n` + bx.querySelector('.msgbody').value).join('\n\n──────────\n\n'),
+    $('smsAll')));
+  fill();
+}
+
+function render(b, meta){
+  ITEMS = [];
+  const todo = b.collect.length + b.teacher.length + b.neisIn.length + b.pending.length + b.odd.length + b.noname.length + b.noProof.length + b.mens.length;
+  /* 문자 대상 — 체크박스와 짝을 맞추기 위한 키(sk)를 붙인다 */
+  const smsEntries = [
+    ...b.collect.map((r, i) => ({type:'collect', r, sk:`c${i}`})),
+    ...b.noProof.map((p, i) => ({type:'proof', r:p.r, d:p.d, sk:`p${i}`})),
+    ...b.mens.map((p, i) => ({type:'mens', r:p.r, d:p.d, sk:`m${i}`})),
+  ].sort((x, y) => x.r.date < y.r.date ? -1 : x.r.date > y.r.date ? 1 : 0);
+  let h = `
+  <div class="status">
+    <div class="status-top"><span class="status-label">마감 진행</span>
+      <span class="status-count"><b id="done">0</b> / ${todo}건 처리</span></div>
+    <div class="bar"><i id="fill"></i></div>
+    <dl class="tally">
+      <div><dt>대조 완료</dt><dd style="color:var(--green)">${b.matched.length}</dd></div>
+      <div><dt>서류 징구</dt><dd style="color:var(--red)">${b.collect.length}</dd></div>
+      <div><dt>증빙 없음</dt><dd style="color:var(--red)">${b.noProof.length}</dd></div>
+      <div><dt>생리결석 확인</dt><dd style="color:var(--amber)">${b.mens.length}</dd></div>
+      <div><dt>담임 처리</dt><dd style="color:var(--amber)">${b.teacher.length}</dd></div>
+      <div><dt>내용 불일치</dt><dd style="color:var(--red)">${b.odd.length}</dd></div>
+      <div><dt>나이스 입력</dt><dd style="color:var(--red)">${b.neisIn.length}</dd></div>
+      ${b.noname.length ? `<div><dt>이름 미인식</dt><dd style="color:var(--amber)">${b.noname.length}</dd></div>` : ''}
+      <div><dt>결재 대기</dt><dd style="color:var(--amber)">${b.pending.length}</dd></div>
+      <div><dt>미인정 제외</dt><dd style="color:var(--gray)">${b.exempt.length}</dd></div>
+    </dl>
+  </div>`;
+
+  if(b.collect.length){
+    h += `<section><div class="sec-head"><h2>학생에게 서류를 받아야 하는 건</h2>
+      <span class="n">${b.collect.length}건</span></div>
+      <p class="sec-note">나이스에는 등재되어 있으나 리로스쿨 결석신고서가 없습니다.</p>`;
+    for(const r of b.collect){
+      const kindTag = r.kind.includes('조퇴') ? '조퇴 신고서'
+                    : r.kind.includes('지각') ? '지각 신고서'
+                    : r.kind.includes('결과') ? '결과 신고서' : '결석신고서';
+      const when = riroSpanText(r.kind, neisRange(r.periods)) || '전일';
+      h += itemHtml('red', dfmt(r.date, r.dow), r.name,
+        `<span class="tag red">${esc(r.kind)}</span><span class="tag gray">${esc(when)}</span>`,
+        r.reason ? `나이스 사유 &ldquo;${esc(r.reason)}&rdquo;` : '',
+        r.periods, `${kindTag}를 <b>${esc(when)}</b>로 제출하도록 안내. 증빙 첨부 확인 후 승인.`,
+        {sec:'서류 받기', kind:r.kind, span:when, sk:`c${b.collect.indexOf(r)}`});
+    }
+    h += `</section>`;
+  }
+
+  if(b.noProof.length){
+    h += `<section><div class="sec-head"><h2>증빙자료를 받아야 하는 건</h2>
+      <span class="n">${b.noProof.length}건</span></div>
+      <p class="sec-note">결석신고서는 나이스와 일치하지만 첨부파일(진료확인서·처방전·약봉투 사진 등)이 없습니다.
+        생리결석은 아래에 따로 모았습니다.</p>`;
+    for(const p of b.noProof){
+      const need = p.r.kind.includes('질병') ? '진료확인서·처방전·약봉투 등' : '사유를 확인할 수 있는 증빙';
+      h += itemHtml('red', dfmt(p.r.date, p.r.dow), p.r.name,
+        `<span class="tag red">${esc(p.r.kind)}</span><span class="tag gray">${esc(p.d.docno)}</span>` +
+        `<span class="tag ${p.d.status === '완료' ? 'green' : 'amber'}">결재 ${esc(p.d.status)}</span>`,
+        (p.d.reason ? `신고서 사유 &ldquo;${esc(p.d.reason)}&rdquo;` : '') +
+        (p.notes.length ? ` · ${esc(p.notes.join(' · '))}` : ''),
+        p.r.periods, `${need}을 리로스쿨 신고서에 첨부하도록 안내. 이미 따로 받았다면 체크.`,
+        {sec:'증빙 받기', kind:p.r.kind, span:p.d.docno, sk:`p${b.noProof.indexOf(p)}`});
+    }
+    h += `</section>`;
+  }
+
+  if(b.mens.length){
+    h += `<section><div class="sec-head"><h2>생리결석 증빙을 따로 받았는지 확인할 건</h2>
+      <span class="n">${b.mens.length}건</span></div>
+      <p class="sec-note">리로스쿨 신고서에 첨부파일이 없는 생리결석입니다. 따로 받은 파일이 있으면 체크하세요 — 체크한 건은 문자에서 빠집니다.</p>`;
+    for(const p of b.mens){
+      h += itemHtml('amber', dfmt(p.r.date, p.r.dow), p.r.name,
+        `<span class="tag amber">${esc(mensLabel(p.d))}</span><span class="tag gray">${esc(p.d.docno)}</span>` +
+        `<span class="tag ${p.d.status === '완료' ? 'green' : 'amber'}">결재 ${esc(p.d.status)}</span>`,
+        (p.d.reason ? `신고서 사유 &ldquo;${esc(p.d.reason)}&rdquo;` : '') +
+        (p.notes.length ? ` · ${esc(p.notes.join(' · '))}` : ''),
+        p.r.periods, '따로 받은 생리결석 증빙 파일이 있는지 확인. 있으면 체크, 없으면 문자로 요청.',
+        {sec:'생리 증빙', kind:p.r.kind, span:p.d.docno, sk:`m${b.mens.indexOf(p)}`});
+    }
+    h += `</section>`;
+  }
+
+  if(smsEntries.length) h += smsSection(smsEntries);
+
+  if(b.odd.length){
+    h += `<section><div class="sec-head"><h2>내용이 어긋나는 건</h2>
+      <span class="n">${b.odd.length}건</span></div>
+      <p class="sec-note">신고서와 나이스 중 한쪽을 정정해야 합니다.</p>`;
+    for(const o of b.odd){
+      h += itemHtml('red', dfmt(o.r.date, o.r.dow), o.r.name,
+        `<span class="tag red">${esc(o.r.kind || '출결구분 없음')}</span>` +
+        (o.d ? `<span class="tag gray">${esc(o.d.docno)}</span>` : ''),
+        esc(o.why), o.r.periods,
+        '나이스 입력값과 신고서 내용 중 사실에 맞는 쪽으로 통일해 주세요.',
+        {sec:'내용 정정', kind:o.r.kind || '출결구분 없음', span:o.d ? o.d.docno : ''});
+    }
+    h += `</section>`;
+  }
+
+  if(b.teacher.length){
+    h += `<section><div class="sec-head"><h2>담임이 직접 챙기는 건</h2>
+      <span class="n">${b.teacher.length}건</span></div>
+      <p class="sec-note">경조사 출석인정은 결석신고서 대상이 아니므로 서류 없음이 정상입니다.</p>`;
+    for(const t of b.teacher){
+      h += itemHtml('amber', dfmt(t.r.date, t.r.dow), t.r.name,
+        `<span class="tag amber">${esc(t.r.kind)}</span>` +
+        (t.r.reason ? `<span class="tag gray">${esc(t.r.reason)}</span>` : ''),
+        esc(t.why), t.r.periods, t.act,
+        {sec:'담임 처리', kind:t.r.kind, span:t.r.reason});
+    }
+    h += `</section>`;
+  }
+
+  if(b.neisIn.length){
+    h += `<section><div class="sec-head"><h2>나이스에 입력해야 하는 건</h2>
+      <span class="n">${b.neisIn.length}건</span></div>
+      <p class="sec-note">결석신고서는 있는데 나이스에 기록이 없습니다. 방향이 반대인 누락입니다.</p>`;
+    for(const d of b.neisIn){
+      h += itemHtml('red', d.final.start.slice(5).replace('-','.'), d.name,
+        `<span class="tag red">${esc(d.kind)}</span><span class="tag ${d.status==='완료'?'green':'amber'}">${esc(d.status)}</span>`,
+        `문서번호 ${esc(d.docno)} · 승인기간 <b>${esc(spanLabel(d.final.span))}</b>` +
+        (d.hasProof ? ` · 증빙 ${esc(d.proof)}` : needsProof(d) ? ` · <b style="color:var(--red)">증빙 없음</b>` : ''), null,
+        `나이스에 <b>${esc(d.kind.replace('/',' · '))} ${esc(spanLabel(d.final.span))}</b>로 입력해 주세요.`,
+        {sec:'나이스 입력', kind:d.kind, span:spanLabel(d.final.span)});
+    }
+    h += `</section>`;
+  }
+
+  if(b.noname.length){
+    h += `<section><div class="sec-head"><h2>이름을 읽지 못한 신고서</h2>
+      <span class="n">${b.noname.length}건</span></div>
+      <p class="sec-note">리로스쿨 화면이 다 뜨기 전에 복사하면 이름 칸이 비어 복사됩니다. 화면이 완전히 뜬 뒤 다시 복사해 대조하는 것이 가장 확실합니다.</p>`;
+    for(const x of b.noname){
+      const d = x.d;
+      h += itemHtml('amber', d.final ? d.final.start.slice(5).replace('-','.') : '—', '(이름 없음)',
+        `<span class="tag amber">${esc(d.kind || '종류 미인식')}</span><span class="tag gray">${esc(d.docno)}</span>`,
+        (d.final ? `승인기간 <b>${esc(spanLabel(d.final.span))}</b>` : '기간 미인식') +
+        (d.reason ? ` · 사유 &ldquo;${esc(d.reason)}&rdquo;` : '') + (x.hint ? ` · ${esc(x.hint)}` : ''),
+        null, '리로스쿨에서 이 문서번호의 학생을 확인하거나, 화면을 다 띄운 뒤 다시 복사해 대조해 주세요.',
+        {sec:'이름 확인', kind:d.kind, span:d.docno});
+    }
+    h += `</section>`;
+  }
+
+  if(b.pending.length){
+    h += `<section><div class="sec-head"><h2>결재만 남은 건</h2>
+      <span class="n">${b.pending.length}건</span></div>`;
+    for(const p of b.pending){
+      h += itemHtml('amber', dfmt(p.r.date, p.r.dow), p.r.name,
+        `<span class="tag green">내용 일치</span><span class="tag amber">${esc(p.d.status)}</span>`,
+        `문서번호 ${esc(p.d.docno)} · ${esc(p.d.kind)} ↔ 나이스 ${esc(p.r.kind)}`,
+        p.r.periods, '서류상 하자는 없습니다. 부장·교감 결재 완료 여부만 월말에 재확인.',
+        {sec:'결재 대기', kind:p.r.kind, span:p.d.status});
+    }
+    h += `</section>`;
+  }
+
+  if(b.matched.length){
+    h += `<section><div class="sec-head"><h2>대조 완료</h2>
+      <span class="n">${b.matched.length}건</span></div>
+      <details class="fold"><summary>학생 · 출결종류 · 기간 · 교시가 모두 일치한 ${b.matched.length}건 보기</summary>
+      <table><tr><th>일자</th><th>성명</th><th>나이스</th><th>결석신고서</th><th>승인기간</th><th>문서번호</th></tr>`;
+    for(const m of b.matched){
+      h += `<tr><td class="d">${esc(dfmt(m.r.date,m.r.dow))}</td><td>${esc(m.r.name)}</td>
+        <td>${esc(m.r.kind)}</td><td>${esc(m.d.kind)}</td>
+        <td class="p">${esc(spanLabel(m.d.final.span))}</td><td class="p">${esc(m.d.docno)}</td></tr>`;
+    }
+    h += `</table></details></section>`;
+  }
+
+  if(b.exempt.length){
+    const by = {};
+    for(const r of b.exempt){
+      by[r.name] = by[r.name] || {};
+      by[r.name][r.kind] = (by[r.name][r.kind]||[]).concat(r.date.slice(5).replace('-','/'));
+      by[r.name]._reason = new Set([...(by[r.name]._reason||[]), r.reason].filter(Boolean));
+    }
+    h += `<section><div class="sec-head"><h2>미인정 출결 — 서류 불요</h2>
+      <span class="n">${b.exempt.length}건</span></div>
+      <details class="fold"><summary>증빙 대상이 아닌 ${b.exempt.length}건 보기</summary>
+      <table><tr><th>성명</th><th>구분</th><th>일자</th><th>사유</th></tr>`;
+    for(const [nm,v] of Object.entries(by)){
+      for(const [k,ds] of Object.entries(v)){
+        if(k === '_reason') continue;
+        h += `<tr><td>${esc(nm)}</td><td>${esc(k)}</td>
+          <td class="p">${ds.length}일 · ${esc(ds.join(', '))}</td>
+          <td>${esc([...v._reason].join(' / '))}</td></tr>`;
+      }
+    }
+    h += `</table></details></section>`;
+  }
+
+  h += `<div class="close"><h2>${esc(meta.title)} 마감</h2>
+    <p>위 ${todo}건을 모두 처리하면 나이스 기록과 서류가 일치합니다.</p>
+    <div id="closeMsg">아직 ${todo}건이 남았습니다.</div>
+    <button class="btn" id="leftBtn">남은 건만 모아 보기 →</button>
+    <button class="btn ghost" onclick="window.print()">보고서 전체 인쇄</button>
+    <button class="btn ghost" id="againBtn">다른 달 점검하기</button></div>`;
+
+  $('stage3').innerHTML = h;
+  SMS_REFRESH = () => {};
+  hookSms(smsEntries);
+
+  const ticks = [...document.querySelectorAll('.tick')];
+  const fill = $('fill'), doneEl = $('done'), msg = $('closeMsg');
+  const sync = () => {
+    const n = ticks.filter(t => t.checked).length;
+    doneEl.textContent = n;
+    fill.style.width = (ticks.length ? n/ticks.length*100 : 100) + '%';
+    ticks.forEach(t => t.closest('.item').classList.toggle('done', t.checked));
+    SMS_REFRESH();
+    if(n === ticks.length){ msg.textContent = '모두 처리했습니다. 마감 가능합니다.'; msg.classList.add('ready'); }
+    else { msg.textContent = `아직 ${ticks.length-n}건이 남았습니다.`; msg.classList.remove('ready'); }
+  };
+  ticks.forEach(t => t.addEventListener('change', sync));
+  sync();
+  $('againBtn').addEventListener('click', () => location.reload());
+  $('leftBtn').addEventListener('click', () => { renderLeft(meta); stage(4); });
+}
+
+/* ───────── 4단계: 남은 일만 모아 보기 ───────── */
+const LEFT_ORDER = [
+  ['서류 받기',  '학생에게 서류를 받아야 하는 건'],
+  ['증빙 받기',  '증빙자료를 받아야 하는 건'],
+  ['생리 증빙',  '생리결석 증빙을 따로 받았는지 확인할 건'],
+  ['내용 정정',  '나이스 또는 신고서를 정정해야 하는 건'],
+  ['나이스 입력','나이스에 입력해야 하는 건'],
+  ['이름 확인',  '이름을 읽지 못한 신고서'],
+  ['담임 처리',  '담임이 직접 챙기는 건'],
+  ['결재 대기',  '결재만 남은 건'],
+];
+let LEFT_TEXT = '';
+function renderLeft(meta){
+  const left = [...document.querySelectorAll('#stage3 .item')]
+    .filter(lab => !lab.querySelector('.tick').checked)
+    .map(lab => ITEMS[Number(lab.dataset.i)]);
+  const now = new Date();
+  const asof = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')} 기준`;
+  const total = ITEMS.length;
+
+  let h = `<div class="left-head"><h2>${esc(meta.title)} 출결 마감 — 남은 일 ${left.length}건</h2>
+    <span class="asof">${asof} · 전체 ${total}건 중 ${total - left.length}건 처리</span></div>`;
+  let txt = `[${meta.title} 출결 마감 — 남은 일 ${left.length}건] ${asof}\n`;
+
+  if(!left.length){
+    h += `<div class="left-empty">남은 일이 없습니다. 이번 달 출결 서류 마감이 끝났습니다.</div>`;
+    txt += '\n남은 일 없음';
+  } else {
+    h += `<div class="left-sum">` + LEFT_ORDER.map(([k]) => {
+      const n = left.filter(x => x.sec === k).length;
+      return n ? `<span>${k} <b>${n}</b></span>` : '';
+    }).join('') + `</div>`;
+    for(const [k, title] of LEFT_ORDER){
+      const g = left.filter(x => x.sec === k).sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+      if(!g.length) continue;
+      h += `<div class="left-grp"><h3>${title}<span class="n">${g.length}건</span></h3>
+        <table><tr><th></th><th>일자</th><th>성명</th><th>구분</th><th>내용</th><th>할 일</th></tr>`;
+      txt += `\n■ ${title} (${g.length}건)\n`;
+      for(const x of g){
+        h += `<tr><td class="box"><i></i></td><td class="d">${esc(x.date)}</td><td class="nm">${esc(x.name)}</td>
+          <td>${esc(x.kind || '')}${x.span ? `<span class="sub2">${esc(x.span)}</span>` : ''}</td>
+          <td>${esc(x.meta)}</td><td class="act">${esc(x.act)}</td></tr>`;
+        txt += `□ ${x.date} ${x.name} · ${x.kind || ''}${x.span ? ` (${x.span})` : ''} — ${x.act}\n`;
+      }
+      h += `</table></div>`;
+    }
+  }
+  h += `<textarea class="left-memo" placeholder="메모 (인쇄 시 내용이 있을 때만 함께 나옵니다)"></textarea>
+    <button class="btn" onclick="window.print()">인쇄 / PDF로 저장</button>
+    <button class="btn ghost" id="leftCopy">텍스트로 복사</button>
+    <button class="btn ghost" id="leftBack">← 보고서로 돌아가기</button>`;
+  $('stage4').innerHTML = h;
+  LEFT_TEXT = txt;
+  $('leftBack').addEventListener('click', () => stage(3));
+  $('leftCopy').addEventListener('click', e => {
+    const btn = e.target, done = () => { btn.textContent = '복사됨'; setTimeout(() => btn.textContent = '텍스트로 복사', 1400); };
+    const memo = $('stage4').querySelector('.left-memo').value.trim();
+    const text = LEFT_TEXT + (memo ? `\n메모: ${memo}` : '');
+    if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done);
+    else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+      ta.select(); try{ document.execCommand('copy'); done(); }catch(_){} document.body.removeChild(ta); }
+  });
+}
+
+/* ───────── 흐름 제어 ───────── */
+function stage(n){
+  ['stage1','stage2','stage3','stage4'].forEach((s,i) => $(s).classList.toggle('hidden', i !== n-1));
+  ['st1','st2','st3','st4'].forEach((s,i) => $(s).classList.toggle('on', i === n-1));
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+$('runBtn').addEventListener('click', async () => {
+  $('log').innerHTML = '';
+  $('runBtn').disabled = true;
+  try{
+    log('나이스 엑셀을 읽는 중…');
+    NEIS = await parseXlsx(fileXlsx);
+    log(`  출결 기록 ${NEIS.length}건 인식`);
+
+    log('붙여넣은 결석신고서를 읽는 중…');
+    DOCS = parseRiro($('pasteBox').value);
+    log(`  결석신고서 ${DOCS.length}건 인식`);
+    if(!DOCS.length) throw new Error('결석신고서를 하나도 찾지 못했습니다. 리로스쿨 화면 전체가 복사되었는지 확인해 주세요.');
+
+    DOCS.forEach(d => d.used = false);
+    BUCKETS = compare(NEIS, DOCS);
+    log(`  대조 완료 — 확인이 필요한 건 ${BUCKETS.all.filter(x => x.lv === 'flag').length}건`);
+
+    showParse();
+    stage(2);
+  }catch(e){
+    log('오류: ' + e.message, true);
+  }
+  $('runBtn').disabled = false;
+});
+
+function showParse(){
+  const rows = BUCKETS.all;
+  const flags = rows.filter(x => x.lv === 'flag').length;
+  $('parseCount').textContent = `${rows.length}행`;
+  $('flagCnt').innerHTML = flags
+    ? `확인이 필요한 건 <b>${flags}</b>건`
+    : `<span style="color:var(--green);font-weight:600">확인이 필요한 건이 없습니다</span>`;
+
+  let warn = '';
+  if(DOCS.expected && DOCS.expected !== DOCS.length)
+    warn += `<div class="warnbox">붙여넣은 글에서 문서번호는 ${DOCS.expected}개가 보이는데 ${DOCS.length}건만 읽었습니다.
+      한 건이 통째로 빠졌을 수 있으니 문서번호 기준으로 한 번 세어 봐 주세요.</div>`;
+  const noName = DOCS.filter(d => d.noName), bySid = DOCS.filter(d => d.nameFrom === 'sid');
+  if(noName.length)
+    warn += `<div class="warnbox">학생 이름을 읽지 못한 신고서가 ${noName.length}건 있습니다
+      (${noName.map(d => esc(d.docno)).join(', ')}). 리로스쿨 화면이 완전히 뜨기 전에 복사하면 이름 칸이 비어서 복사됩니다.
+      화면이 다 뜬 것을 확인한 뒤 다시 복사해 붙여넣으면 해결됩니다.</div>`;
+  if(bySid.length)
+    warn += `<div class="warnbox">이름 칸이 비어 있던 신고서 ${bySid.length}건은 학번 끝 번호로 나이스 명단에서 이름을 찾아 채웠습니다
+      (${bySid.map(d => `${esc(d.docno)} → ${esc(d.name)}`).join(', ')}). 맞는지 한 번 확인해 주세요.</div>`;
+  $('parseWarn').innerHTML = warn;
+
+  const spanTxt = p => p ? `${p.start.slice(5).replace('-','.')} ~ ${p.end.slice(5).replace('-','.')} (${p.span})` : '—';
+
+  let h = `<tr><th>일자</th><th>성명</th><th>나이스</th><th>리로스쿨 신고서</th>
+           <th>판정</th><th>확인 사유</th></tr>`;
+
+  for(const x of rows){
+    const r = x.r, d = x.d;
+    const date = r ? dfmt(r.date, r.dow)
+                   : (d && d.final ? d.final.start.slice(5).replace('-','.') : '—');
+    const name = r ? r.name : (d && d.name ? d.name : '—');
+    const no   = r && r.no ? `<span class="sub2">${esc(r.no)}번</span>` : '';
+
+    const neisCell = r
+      ? `${esc(r.kind || '(구분 없음)')}${r.periodsRaw ? `<span class="sub2">${esc(r.periodsRaw)}</span>` : ''}`
+      : `<span class="sub2">기록 없음</span>`;
+
+    let riroCell = `<span class="sub2">서류 없음</span>`;
+    if(d){
+      const diff = d.req && d.appr &&
+        (d.req.start !== d.appr.start || d.req.end !== d.appr.end || d.req.span !== d.appr.span);
+      riroCell = `${esc(d.kind || '(종류 미인식)')}
+        <span class="sub2"${diff ? ' style="color:var(--flag);font-weight:600"' : ''}>승인 ${esc(spanTxt(d.appr || d.final))}${diff ? ' · 학생 신청과 다름' : ''}</span>
+        <span class="sub2">${esc(d.docno)} · ${esc(d.status)}${d.nameFrom === 'sid' ? ' · 이름은 학번으로 채움' : ''}</span>
+        ${d.hasProof ? `<span class="sub2">증빙 ${esc(d.proof)} ${d.proofs.length}건</span>`
+          : needsProof(d) ? `<span class="sub2" style="color:var(--flag);font-weight:600">증빙 첨부 없음</span>`
+          : isMens(d) ? `<span class="sub2" style="color:var(--flag);font-weight:600">첨부 없음 · 생리결석 증빙 따로 받았는지 확인</span>`
+          : `<span class="sub2">증빙 없음 · 기타 사유는 대상 아님</span>`}`;
+    }
+
+    h += `<tr class="${x.lv}"><td class="d">${esc(date)}</td>
+      <td>${esc(name)}${no}</td>
+      <td>${neisCell}</td>
+      <td>${riroCell}</td>
+      <td class="judge">${esc(x.judge)}</td>
+      <td class="why">${esc(x.why)}</td></tr>`;
+  }
+  $('checkTable').innerHTML = h;
+
+  const only = $('onlyFlag');
+  const applyFilter = () => {
+    [...$('checkTable').rows].forEach((tr,i) => {
+      if(i === 0) return;
+      tr.style.display = (only.checked && !tr.classList.contains('flag')) ? 'none' : '';
+    });
+  };
+  only.checked = false;
+  only.onchange = applyFilter;
+  applyFilter();
+}
+
+$('backBtn').addEventListener('click', () => stage(1));
+$('goBtn').addEventListener('click', () => {
+  const first = NEIS[0]?.date || '';
+  const title = first ? `${first.slice(0,4)}년 ${Number(first.slice(5,7))}월` : '이번 달';
+  render(BUCKETS, {title});
+  stage(3);
+});
+</script>
+</body>
+</html>
